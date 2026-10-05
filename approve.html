@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="az">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ShortsBot – TikTok Approve</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:wght@600&display=swap">
+<style>
+  /* Layout: phone-first queue; sticky account bar on top, sticky post bar at the bottom */
+  :root {
+    --bg: #f4f7f5; --surface: #ffffff; --fg: #15201a; --muted: #5a6a60; --line: #d9e2dc;
+    --accent: #1f7a4d; --accent-fg: #ffffff; --warn: #a45a00; --bad: #b42318; --good: #1f7a4d;
+    --display: "Source Serif 4", Georgia, serif;
+    --body: "Source Sans 3", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg: #0f1512; --surface: #18201b; --fg: #e3ebe6; --muted: #98a89e; --line: #2b3830;
+    --accent: #5cc48f; --accent-fg: #0b130f; --warn: #f0a54a; --bad: #ff8a80; --good: #5cc48f; color-scheme: dark } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body); }
+  .wrap { max-width: 760px; margin: 0 auto; padding-inline: 16px; padding-block: 16px 140px; display: grid; gap: 16px; }
+  h1 { font-family: var(--display); font-size: 1.6rem; margin: 0; text-wrap: balance; }
+  h2 { font-size: 1.05rem; margin: 0; }
+  p { margin: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: .85rem; }
+  .en { color: var(--muted); font-size: .8rem; }
+  a { color: var(--accent); }
+  button, select, textarea, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
+  .account { display: flex; gap: 12px; align-items: center; }
+  .account img { width: 44px; height: 44px; border-radius: 50%; background: var(--line); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .grow { flex: 1 1 200px; min-width: 0; }
+  .btn { border: 1px solid var(--line); background: var(--surface); padding: 8px 14px; border-radius: 8px; }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 700; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  input[type=password], input[type=text], select, textarea { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+  textarea { min-height: 110px; resize: vertical; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 10px; grid-template-columns: 120px minmax(0,1fr); }
+  .card.off { opacity: .55; }
+  .card .media { aspect-ratio: 9/16; width: 120px; max-width: 100%; border-radius: 8px; overflow: hidden; background: #000; }
+  .card .media iframe, .card .media img { width: 100%; height: 100%; border: 0; object-fit: cover; display: block; }
+  .card .body { display: grid; gap: 10px; min-width: 0; }
+  .card h3 { font-size: 1rem; margin: 0; overflow-wrap: anywhere; }
+  .checks { display: flex; gap: 14px; flex-wrap: wrap; }
+  .checks label { display: flex; gap: 6px; align-items: center; }
+  .checks label.disabled { color: var(--muted); }
+  .counter { text-align: right; font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .status { font-weight: 600; }
+  .status.ok { color: var(--good); } .status.bad { color: var(--bad); } .status.wait { color: var(--warn); }
+  .disclose { border-top: 1px dashed var(--line); padding-top: 10px; display: grid; gap: 8px; }
+  @media (max-width: 520px) { .card { grid-template-columns: 1fr; } .card .media { width: 100%; max-width: 260px; justify-self: center; } }
+
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .bar .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 8px; }
+  .consent { font-size: .85rem; color: var(--muted); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header style="display:grid;gap:4px">
+    <h1>TikTok paylaşımını təsdiqlə</h1>
+    <p class="en">Review and approve Sağlam Yaşa videos before they are posted to TikTok.</p>
+  </header>
+
+  <!-- 1. Giriş: GitHub açarı -->
+  <section class="panel" id="setup" hidden>
+    <h2>Bir dəfəlik qoşulma <span class="en">/ One-time setup</span></h2>
+    <p class="small">ShortsBot-u idarə etmək üçün GitHub açarını (token) bura yapışdırın. Açar yalnız bu cihazda saxlanılır.</p>
+    <input type="password" id="token" placeholder="github_pat_…" autocomplete="off">
+    <div class="row"><button class="btn primary" id="saveToken">Qoşul / Connect</button>
+      <a class="small" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Açar yarat</a></div>
+    <p class="small muted" id="setupErr"></p>
+  </section>
+
+  <!-- 2. Hesab -->
+  <section class="panel" id="accountPanel" hidden>
+    <div class="account">
+      <img id="avatar" alt="">
+      <div class="grow">
+        <p class="small muted">Paylaşılacaq TikTok hesabı <span class="en">/ Posting to</span></p>
+        <p><strong id="nickname">—</strong> <span class="muted" id="username"></span></p>
+      </div>
+      <button class="btn small" id="reload">Yenilə</button>
+    </div>
+    <p class="small muted" id="limits"></p>
+    <div class="row">
+      <label class="grow small">Hamısı üçün məxfilik <span class="en">/ Privacy for all</span>
+        <select id="bulkPrivacy"><option value="">Seçin… / Select…</option></select></label>
+      <button class="btn" id="applyBulk">Tətbiq et</button>
+      <button class="btn" id="toggleAll">Hamısını seç / ləğv et</button>
+    </div>
+  </section>
+
+  <p id="msg" class="muted"></p>
+  <div id="list" style="display:grid;gap:12px"></div>
+</div>
+
+<div class="bar" id="bar" hidden>
+  <div class="inner">
+    <p class="consent" id="consent">Paylaşmaqla TikTok-un <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener">Music Usage Confirmation</a> şərtlərini qəbul edirsiniz. <span class="en">By posting, you agree to TikTok's Music Usage Confirmation.</span></p>
+    <div class="row">
+      <span class="grow small" id="selInfo"></span>
+      <button class="btn primary" id="post" disabled>Paylaş / Post</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const OWNER = "saglamyasaaz-alt", REPO = "shortsbot", WF = "tiktok_post.yml";
+const API = `https://api.github.com/repos/${OWNER}/${REPO}`;
+const PRIVACY_LABELS = {
+  PUBLIC_TO_EVERYONE: "Hamı / Everyone",
+  MUTUAL_FOLLOW_FRIENDS: "Dostlar / Friends",
+  FOLLOWER_OF_CREATOR: "İzləyicilər / Followers",
+  SELF_ONLY: "Yalnız mən / Only me",
+};
+let token = "";
+try { token = localStorage.getItem("sb_token") || ""; } catch (e) {}
+let creator = null, queue = [], todayCount = 0, dailyLimit = 20, results = [];
+const $ = (id) => document.getElementById(id);
+
+async function gh(path, opts = {}) {
+  const r = await fetch(path.startsWith("http") ? path : API + path, {
+    ...opts,
+    headers: { Authorization: `Bearer ${token}`, Accept: opts.raw ? "application/vnd.github.raw+json" : "application/vnd.github+json", ...(opts.headers || {}) },
+  });
+  if (r.status === 401 || r.status === 403) throw new Error("GitHub açarı qəbul edilmədi (401/403). Açarı yoxlayın.");
+  if (!r.ok && r.status !== 404) throw new Error(`GitHub xətası ${r.status}`);
+  if (r.status === 404) return null;
+  if (r.status === 204) return true;
+  return opts.raw ? r.text() : r.json();
+}
+const rawJSON = async (p) => { const t = await gh(`/contents/${p}?ref=main&t=${Date.now()}`, { raw: true }); return t ? JSON.parse(t) : null; };
+
+function caption(item) {
+  return [item.title || "", item.description || ""].map(s => s.trim()).filter(Boolean).join("\n\n").slice(0, 2200);
+}
+
+async function load() {
+  $("msg").textContent = "Yüklənir…";
+  $("list").innerHTML = "";
+  const [state, ci, rel, res] = await Promise.all([
+    rawJSON("data/state.json"), rawJSON("data/tiktok_creator.json"),
+    gh("/releases/tags/clips"), rawJSON("data/tiktok_results.json"),
+  ]);
+  results = res || [];
+  creator = ci && ci.data;
+  const ready = new Set(((rel && rel.assets) || []).map(a => a.name.replace(/\.mp4$/, "")));
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Baku" });
+  todayCount = ((state.counts || {})[today] || {}).tiktok || 0;
+  const left = Math.max(0, dailyLimit - todayCount);
+  queue = state.order.filter(v => {
+    const it = state.items[v] || {};
+    return ready.has(v) && !it.skip && !(it.done || {}).tiktok;
+  }).slice(0, left).map(v => ({ vid: v, item: state.items[v] || { title: (state.videos[v] || {}).title } }));
+
+  renderAccount(ci);
+  $("limits").textContent = `Bu gün TikTok-a: ${todayCount}/${dailyLimit}. Növbədə: ${queue.length} video.` +
+    (creator && creator.max_video_post_duration_sec ? ` Maks. müddət: ${creator.max_video_post_duration_sec} san.` : "");
+  $("msg").textContent = queue.length ? "" : "Hazırda təsdiq gözləyən video yoxdur. / Nothing to approve right now.";
+  queue.forEach(renderCard);
+  $("bar").hidden = !queue.length;
+  updateSel();
+}
+
+function renderAccount(ci) {
+  $("accountPanel").hidden = false;
+  if (!creator) { $("nickname").textContent = "Hesab məlumatı hələ yoxdur"; return; }
+  $("nickname").textContent = creator.creator_nickname || "—";
+  $("username").textContent = creator.creator_username ? "@" + creator.creator_username : "";
+  if (creator.creator_avatar_url) $("avatar").src = creator.creator_avatar_url;
+  const sel = $("bulkPrivacy");
+  sel.length = 1;
+  (creator.privacy_level_options || []).forEach(o => sel.add(new Option(PRIVACY_LABELS[o] || o, o)));
+}
+
+function renderCard(q, idx) {
+  const it = q.item, yt = ((it.done || {}).youtube || {}).id;
+  const el = document.createElement("article");
+  el.className = "card"; el.id = "c_" + q.vid;
+  const media = yt
+    ? `<iframe src="https://www.youtube.com/embed/${yt}?rel=0" title="Ön baxış" loading="lazy" allowfullscreen></iframe>`
+    : `<img src="https://i.ytimg.com/vi/${q.vid}/hqdefault.jpg" alt="">`;
+  const opts = (creator && creator.privacy_level_options || []).map(o => `<option value="${o}">${PRIVACY_LABELS[o] || o}</option>`).join("");
+  const dis = (k) => creator && creator[k] ? "disabled" : "";
+  const disL = (k) => creator && creator[k] ? "disabled" : "";
+  el.innerHTML = `
+    <div class="media">${media}</div>
+    <div class="body">
+      <div class="row"><label class="row grow"><input type="checkbox" class="sel" id="s_${q.vid}" checked> <h3></h3></label></div>
+      <label class="small">Caption <span class="en">(max 2200)</span><textarea id="t_${q.vid}" maxlength="2200"></textarea></label>
+      <div class="counter" id="n_${q.vid}"></div>
+      <label class="small">Kim görə bilər? <span class="en">/ Who can view</span>
+        <select id="p_${q.vid}" class="priv"><option value="">Seçin… / Select…</option>${opts}</select></label>
+      <div class="checks small">
+        <label class="${disL('comment_disabled')}"><input type="checkbox" id="cm_${q.vid}" ${dis('comment_disabled')}> Şərh / Comment</label>
+        <label class="${disL('duet_disabled')}"><input type="checkbox" id="du_${q.vid}" ${dis('duet_disabled')}> Duet</label>
+        <label class="${disL('stitch_disabled')}"><input type="checkbox" id="st_${q.vid}" ${dis('stitch_disabled')}> Stitch</label>
+      </div>
+      <div class="disclose small">
+        <label class="row"><input type="checkbox" id="d_${q.vid}"> Reklam məzmununu açıqla <span class="en">/ Disclose video content</span></label>
+        <div id="do_${q.vid}" class="checks" hidden>
+          <label><input type="checkbox" id="bo_${q.vid}"> Öz brendim <span class="en">/ Your brand</span></label>
+          <label><input type="checkbox" id="bc_${q.vid}"> Sponsorlu <span class="en">/ Branded content</span></label>
+        </div>
+        <p class="muted" id="dh_${q.vid}" hidden></p>
+      </div>
+      <p class="status small" id="r_${q.vid}"></p>
+    </div>`;
+  el.querySelector("h3").textContent = it.title || q.vid;
+  $("list").appendChild(el);
+  const ta = $("t_" + q.vid);
+  ta.value = caption(it);
+  const count = () => $("n_" + q.vid).textContent = `${ta.value.length}/2200`;
+  ta.addEventListener("input", count); count();
+  $("s_" + q.vid).addEventListener("change", () => { el.classList.toggle("off", !$("s_" + q.vid).checked); updateSel(); });
+  $("p_" + q.vid).addEventListener("change", () => { syncDisclose(q.vid); updateSel(); });
+  ["d_", "bo_", "bc_"].forEach(p => $(p + q.vid).addEventListener("change", () => { syncDisclose(q.vid); updateSel(); }));
+}
+
+function syncDisclose(vid) {
+  const on = $("d_" + vid).checked;
+  $("do_" + vid).hidden = !on;
+  if (!on) { $("bo_" + vid).checked = false; $("bc_" + vid).checked = false; }
+  const bc = $("bc_" + vid).checked, bo = $("bo_" + vid).checked;
+  // Sponsorlu məzmun "Yalnız mən" ilə paylaşıla bilməz (TikTok qaydası)
+  const self = $("p_" + vid).querySelector('option[value="SELF_ONLY"]');
+  if (self) self.disabled = bc;
+  if (bc && $("p_" + vid).value === "SELF_ONLY") $("p_" + vid).value = "";
+  const h = $("dh_" + vid);
+  h.hidden = !on;
+  h.textContent = !on ? "" : (bc ? "Video 'Paid partnership' kimi işarələnəcək." : bo ? "Video 'Promotional content' kimi işarələnəcək." : "Davam etmək üçün variantlardan birini seçin.");
+}
+
+function selected() { return queue.filter(q => $("s_" + q.vid) && $("s_" + q.vid).checked); }
+function validItem(q) {
+  const v = q.vid;
+  if (!$("p_" + v).value) return false;
+  if ($("d_" + v).checked && !$("bo_" + v).checked && !$("bc_" + v).checked) return false;
+  return true;
+}
+function updateSel() {
+  const s = selected(), ok = s.filter(validItem).length;
+  $("selInfo").textContent = s.length ? `${s.length} seçilib, ${ok} hazırdır` + (ok < s.length ? " (məxfiliyi seçin)" : "") : "Heç nə seçilməyib";
+  $("post").disabled = !s.length || ok < s.length;
+  const anyBranded = s.some(q => $("bc_" + q.vid).checked);
+  $("consent").innerHTML = anyBranded
+    ? `Paylaşmaqla TikTok-un <a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener">Branded Content Policy</a> və <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener">Music Usage Confirmation</a> şərtlərini qəbul edirsiniz. <span class="en">By posting, you agree to TikTok's Branded Content Policy and Music Usage Confirmation.</span>`
+    : `Paylaşmaqla TikTok-un <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener">Music Usage Confirmation</a> şərtlərini qəbul edirsiniz. <span class="en">By posting, you agree to TikTok's Music Usage Confirmation.</span>`;
+}
+
+$("applyBulk").onclick = () => {
+  const v = $("bulkPrivacy").value; if (!v) return;
+  selected().forEach(q => { const s = $("p_" + q.vid); const o = s.querySelector(`option[value="${v}"]`); if (o && !o.disabled) s.value = v; });
+  updateSel();
+};
+$("toggleAll").onclick = () => {
+  const all = selected().length === queue.length;
+  queue.forEach(q => { $("s_" + q.vid).checked = !all; $("c_" + q.vid).classList.toggle("off", all); });
+  updateSel();
+};
+$("reload").onclick = () => load().catch(showErr);
+
+$("post").onclick = async () => {
+  const items = selected().map(q => ({
+    vid: q.vid,
+    caption: $("t_" + q.vid).value.slice(0, 2200),
+    privacy_level: $("p_" + q.vid).value,
+    disable_comment: !$("cm_" + q.vid).checked,
+    disable_duet: !$("du_" + q.vid).checked,
+    disable_stitch: !$("st_" + q.vid).checked,
+    brand_organic_toggle: $("bo_" + q.vid).checked,
+    brand_content_toggle: $("bc_" + q.vid).checked,
+  }));
+  const plan = { id: Date.now().toString(36), requested_at: new Date().toISOString(), items };
+  $("post").disabled = true;
+  try {
+    const cur = await gh(`/contents/data/tiktok_plan.json?ref=main`);
+    const body = { message: `TikTok planı (${items.length} video)`, branch: "main",
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(plan, null, 1)))) };
+    if (cur && cur.sha) body.sha = cur.sha;
+    await gh(`/contents/data/tiktok_plan.json`, { method: "PUT", body: JSON.stringify(body) });
+    await gh(`/actions/workflows/${WF}/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main" }) });
+    items.forEach(i => { const r = $("r_" + i.vid); r.className = "status small wait"; r.textContent = "Göndərilir… / Posting…"; });
+    $("selInfo").textContent = "Paylaşılır, səhifəni bağlamayın…";
+    await waitRun(plan.id);
+  } catch (e) { showErr(e); $("post").disabled = false; }
+};
+
+async function waitRun(planId) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < 30 * 60 * 1000) {
+    await new Promise(r => setTimeout(r, 15000));
+    const res = await rawJSON("data/tiktok_results.json") || [];
+    const mine = res.filter(r => r.plan_id === planId);
+    mine.forEach(r => {
+      const el = $("r_" + r.vid); if (!el) return;
+      el.className = "status small " + (r.ok ? "ok" : "bad");
+      el.textContent = r.ok ? "Paylaşıldı ✓ / Posted" : "Xəta: " + r.error;
+    });
+    const runs = await gh(`/actions/workflows/${WF}/runs?per_page=1`);
+    const run = runs && runs.workflow_runs && runs.workflow_runs[0];
+    if (mine.length && run && run.status === "completed") {
+      const ok = mine.filter(r => r.ok).length;
+      $("selInfo").textContent = `Bitdi: ${ok}/${mine.length} paylaşıldı. TikTok-da görünməsi bir neçə dəqiqə çəkə bilər.`;
+      return;
+    }
+  }
+  $("selInfo").textContent = "Hələ işləyir. Bir az sonra 'Yenilə' basın.";
+}
+
+function showErr(e) { $("msg").textContent = "⚠ " + (e && e.message || e); }
+
+$("saveToken").onclick = async () => {
+  token = $("token").value.trim();
+  try { localStorage.setItem("sb_token", token); } catch (e) {}
+  $("setup").hidden = true;
+  load().catch(e => { $("setup").hidden = false; $("setupErr").textContent = e.message; });
+};
+
+if (!token) $("setup").hidden = false; else load().catch(e => { $("setup").hidden = false; $("setupErr").textContent = e.message; });
+</script>
+</body>
+</html>
