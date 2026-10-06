@@ -87,6 +87,7 @@
         <p class="small muted">Paylaşılacaq TikTok hesabı <span class="en">/ Posting to</span></p>
         <p><strong id="nickname">—</strong> <span class="muted" id="username"></span></p>
       </div>
+      <button class="btn small" id="connect">TikTok-u qoş / Connect</button>
       <button class="btn small" id="reload">Yenilə</button>
     </div>
     <p class="small muted" id="limits"></p>
@@ -98,6 +99,12 @@
     </div>
   </section>
 
+  <section class="panel" id="schedPanel" hidden>
+    <h2>Cədvəl <span class="en">/ Scheduled — one video every day at 23:00 (Baku)</span></h2>
+    <p class="small muted" id="schedInfo"></p>
+    <ol class="small" id="schedList" style="margin:0;padding-left:1.2rem;display:grid;gap:4px"></ol>
+  </section>
+
   <p id="msg" class="muted"></p>
   <div id="list" style="display:grid;gap:12px"></div>
 </div>
@@ -107,13 +114,17 @@
     <p class="consent" id="consent">Paylaşmaqla TikTok-un <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener">Music Usage Confirmation</a> şərtlərini qəbul edirsiniz. <span class="en">By posting, you agree to TikTok's Music Usage Confirmation.</span></p>
     <div class="row">
       <span class="grow small" id="selInfo"></span>
-      <button class="btn primary" id="post" disabled>Paylaş / Post</button>
+      <button class="btn" id="post" disabled>İndi paylaş / Post now</button>
+      <button class="btn primary" id="schedule" disabled>Cədvələ əlavə et / Schedule</button>
     </div>
   </div>
 </div>
 
 <script>
 const OWNER = "saglamyasaaz-alt", REPO = "shortsbot", WF = "tiktok_post.yml";
+const TT_CLIENT_KEY = "sbawnasibdprf5b0qw"; // TikTok tətbiqinin açıq açarı (client key)
+const TT_REDIRECT = "https://saglamyasaaz-alt.github.io/callback.html";
+const TT_SCOPES = "user.info.basic,video.upload,video.publish";
 const API = `https://api.github.com/repos/${OWNER}/${REPO}`;
 const PRIVACY_LABELS = {
   PUBLIC_TO_EVERYONE: "Hamı / Everyone",
@@ -123,7 +134,7 @@ const PRIVACY_LABELS = {
 };
 let token = "";
 try { token = localStorage.getItem("sb_token") || ""; } catch (e) {}
-let creator = null, queue = [], todayCount = 0, dailyLimit = 20, results = [];
+let creator = null, queue = [], todayCount = 0, dailyLimit = 20, results = [], approved = [], approvedSha = null;
 const $ = (id) => document.getElementById(id);
 
 async function gh(path, opts = {}) {
@@ -146,28 +157,50 @@ function caption(item) {
 async function load() {
   $("msg").textContent = "Yüklənir…";
   $("list").innerHTML = "";
-  const [state, ci, rel, res] = await Promise.all([
+  const [state, ci, rel, res, apf] = await Promise.all([
     rawJSON("data/state.json"), rawJSON("data/tiktok_creator.json"),
     gh("/releases/tags/clips"), rawJSON("data/tiktok_results.json"),
+    gh(`/contents/data/tiktok_approved.json?ref=main&t=${Date.now()}`),
   ]);
+  approved = []; approvedSha = null;
+  if (apf && apf.content) {
+    approvedSha = apf.sha;
+    try { approved = JSON.parse(decodeURIComponent(escape(atob(apf.content.replace(/\n/g, ""))))).items || []; } catch (e) {}
+  }
+  const approvedSet = new Set(approved.map(a => a.vid));
   results = res || [];
   creator = ci && ci.data;
   const ready = new Set(((rel && rel.assets) || []).map(a => a.name.replace(/\.mp4$/, "")));
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Baku" });
   todayCount = ((state.counts || {})[today] || {}).tiktok || 0;
-  const left = Math.max(0, dailyLimit - todayCount);
   queue = state.order.filter(v => {
     const it = state.items[v] || {};
-    return ready.has(v) && !it.skip && !(it.done || {}).tiktok;
-  }).slice(0, left).map(v => ({ vid: v, item: state.items[v] || { title: (state.videos[v] || {}).title } }));
+    return ready.has(v) && !it.skip && !(it.done || {}).tiktok && !approvedSet.has(v);
+  }).slice(0, 30).map(v => ({ vid: v, item: state.items[v] || { title: (state.videos[v] || {}).title } }));
+  renderSchedule(state);
 
   renderAccount(ci);
-  $("limits").textContent = `Bu gün TikTok-a: ${todayCount}/${dailyLimit}. Növbədə: ${queue.length} video.` +
+  $("limits").textContent = `Bu gün TikTok-a paylaşılıb: ${todayCount}. Təsdiq gözləyən: ${queue.length} video.` +
     (creator && creator.max_video_post_duration_sec ? ` Maks. müddət: ${creator.max_video_post_duration_sec} san.` : "");
   $("msg").textContent = queue.length ? "" : "Hazırda təsdiq gözləyən video yoxdur. / Nothing to approve right now.";
   queue.forEach(renderCard);
   $("bar").hidden = !queue.length;
   updateSel();
+}
+
+function renderSchedule(state) {
+  $("schedPanel").hidden = false;
+  $("schedInfo").textContent = approved.length
+    ? `${approved.length} video təsdiqlənib — təxminən ${approved.length} gün yetəcək. Hər gün 23:00-da biri paylaşılır.`
+    : "Cədvəldə video yoxdur. Aşağıdan videoları seçib \"Cədvələ əlavə et\" basın.";
+  const ol = $("schedList"); ol.innerHTML = "";
+  approved.slice(0, 10).forEach(a => {
+    const li = document.createElement("li");
+    const t = ((state.items[a.vid] || {}).title) || a.vid;
+    li.textContent = `${t} — ${PRIVACY_LABELS[a.privacy_level] || a.privacy_level}`;
+    ol.appendChild(li);
+  });
+  if (approved.length > 10) { const li = document.createElement("li"); li.textContent = `… və daha ${approved.length - 10}`; ol.appendChild(li); }
 }
 
 function renderAccount(ci) {
@@ -250,6 +283,7 @@ function updateSel() {
   const s = selected(), ok = s.filter(validItem).length;
   $("selInfo").textContent = s.length ? `${s.length} seçilib, ${ok} hazırdır` + (ok < s.length ? " (məxfiliyi seçin)" : "") : "Heç nə seçilməyib";
   $("post").disabled = !s.length || ok < s.length;
+  $("schedule").disabled = !s.length || ok < s.length;
   const anyBranded = s.some(q => $("bc_" + q.vid).checked);
   $("consent").innerHTML = anyBranded
     ? `Paylaşmaqla TikTok-un <a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener">Branded Content Policy</a> və <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener">Music Usage Confirmation</a> şərtlərini qəbul edirsiniz. <span class="en">By posting, you agree to TikTok's Branded Content Policy and Music Usage Confirmation.</span>`
@@ -268,8 +302,8 @@ $("toggleAll").onclick = () => {
 };
 $("reload").onclick = () => load().catch(showErr);
 
-$("post").onclick = async () => {
-  const items = selected().map(q => ({
+function collect() {
+  return selected().map(q => ({
     vid: q.vid,
     caption: $("t_" + q.vid).value.slice(0, 2200),
     privacy_level: $("p_" + q.vid).value,
@@ -279,6 +313,32 @@ $("post").onclick = async () => {
     brand_organic_toggle: $("bo_" + q.vid).checked,
     brand_content_toggle: $("bc_" + q.vid).checked,
   }));
+}
+
+$("schedule").onclick = async () => {
+  const planId = Date.now().toString(36), at = new Date().toISOString();
+  const items = collect().map(i => ({ ...i, plan_id: planId, approved_at: at }));
+  $("schedule").disabled = true; $("post").disabled = true;
+  try {
+    const all = approved.concat(items);
+    const body = { message: `TikTok cədvəli: +${items.length} video`, branch: "main",
+      content: btoa(unescape(encodeURIComponent(JSON.stringify({ items: all }, null, 1)))) };
+    if (approvedSha) body.sha = approvedSha;
+    await gh(`/contents/data/tiktok_approved.json`, { method: "PUT", body: JSON.stringify(body) });
+    $("selInfo").textContent = `${items.length} video cədvələ əlavə edildi. Hər gün 23:00-da biri paylaşılacaq.`;
+    await load();
+  } catch (e) { showErr(e); updateSel(); }
+};
+
+$("connect").onclick = () => {
+  const st = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  try { localStorage.setItem("sb_tt_state", st); } catch (e) {}
+  const q = new URLSearchParams({ client_key: TT_CLIENT_KEY, scope: TT_SCOPES, response_type: "code", redirect_uri: TT_REDIRECT, state: st });
+  location.href = "https://www.tiktok.com/v2/auth/authorize/?" + q.toString();
+};
+
+$("post").onclick = async () => {
+  const items = collect();
   const plan = { id: Date.now().toString(36), requested_at: new Date().toISOString(), items };
   $("post").disabled = true;
   try {
